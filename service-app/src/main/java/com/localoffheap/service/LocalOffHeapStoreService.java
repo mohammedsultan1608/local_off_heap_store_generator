@@ -70,7 +70,6 @@ public final class LocalOffHeapStoreService {
             if (result.status() == ApplyStatus.APPLIED) {
                 try {
                     publisher.publish(result.notification().orElseThrow());
-                    checkpointStore.save(new SourceCheckpoint(event.sourceType(), event.sourcePosition()));
                     metrics.incrementApplied();
                 } catch (RuntimeException ex) {
                     metrics.incrementPublishFailures();
@@ -81,6 +80,7 @@ public final class LocalOffHeapStoreService {
             } else {
                 metrics.incrementStale();
             }
+            checkpointStore.save(new SourceCheckpoint(event.sourceType(), event.sourcePosition()));
         }
         return processed;
     }
