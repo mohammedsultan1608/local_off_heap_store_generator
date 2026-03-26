@@ -1,0 +1,16 @@
+plugins {
+    id 'application'
+}
+
+dependencies {
+    implementation project(":core-domain")
+    implementation project(":snapshot-postgres")
+    implementation project(":ingress-aeron")
+    implementation project(":ingress-kafka")
+    implementation project(":egress-publisher")
+    implementation 'io.aeron:aeron-driver:1.48.9'
+}
+
+application {
+    mainClass = 'com.localoffheap.service.LocalOffHeapStoreApplication'
+}

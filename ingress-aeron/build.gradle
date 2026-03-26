@@ -1,0 +1,4 @@
+dependencies {
+    implementation project(":core-domain")
+    implementation 'io.aeron:aeron-client:1.48.9'
+}

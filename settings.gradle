@@ -1,0 +1,8 @@
+rootProject.name = "local-off-heap-store-generator"
+
+include("service-app")
+include("core-domain")
+include("ingress-aeron")
+include("ingress-kafka")
+include("snapshot-postgres")
+include("egress-publisher")
