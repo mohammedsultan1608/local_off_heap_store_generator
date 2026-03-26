@@ -40,3 +40,19 @@ subprojects {
         testImplementation 'org.assertj:assertj-core:3.27.2'
     }
 }
+
+tasks.register('cleanCoverageReports', Delete) {
+    delete layout.projectDirectory.dir('coverage-reports')
+}
+
+tasks.register('coverageReports', Copy) {
+    dependsOn subprojects.collect { "${it.path}:jacocoTestReport" }
+    dependsOn tasks.named('cleanCoverageReports')
+    into layout.projectDirectory.dir('coverage-reports')
+
+    subprojects.each { projectRef ->
+        from(projectRef.layout.buildDirectory.dir('reports/jacoco/test')) {
+            into projectRef.name
+        }
+    }
+}

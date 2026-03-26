@@ -24,6 +24,19 @@ Install Gradle 8+ locally, then run:
 gradle clean test
 ```
 
+Generate and collect coverage reports in a repo-level folder:
+
+```bash
+gradle clean test jacocoTestReport coverageReports
+```
+
+Then open:
+
+- `coverage-reports/core-domain/html/index.html`
+- `coverage-reports/egress-publisher/html/index.html`
+- `coverage-reports/service-app/html/index.html`
+- `coverage-reports/snapshot-postgres/html/index.html`
+
 Quick runtime validation without Gradle:
 
 ```bash

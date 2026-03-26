@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LocalOffHeapStoreApplication.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">service-app</a> &gt; <a href="index.source.html" class="el_package">com.localoffheap.service</a> &gt; <span class="el_source">LocalOffHeapStoreApplication.java</span></div><h1>LocalOffHeapStoreApplication.java</h1><pre class="source lang-java linenums">package com.localoffheap.service;
+
+import com.localoffheap.core.apply.UpsertApplyEngine;
+import com.localoffheap.core.checkpoint.InMemoryCheckpointStore;
+import com.localoffheap.core.ingress.EventSource;
+import com.localoffheap.core.ordering.OrderingAndVersionGate;
+import com.localoffheap.core.store.DirectByteBufferOffHeapStore;
+import com.localoffheap.egress.AeronNotificationPublisher;
+import com.localoffheap.egress.InMemoryDeadLetterPublisher;
+import com.localoffheap.egress.KafkaNotificationPublisher;
+import com.localoffheap.egress.NotificationPublisher;
+import com.localoffheap.egress.RealAeronNotificationPublisher;
+import com.localoffheap.egress.RetryingStateChangePublisher;
+import com.localoffheap.ingress.aeron.RealAeronIngressAdapter;
+import com.localoffheap.ingress.aeron.AeronIngressAdapter;
+import com.localoffheap.ingress.kafka.KafkaIngressAdapter;
+import com.localoffheap.snapshot.InMemoryPostgresSnapshotRepository;
+import com.localoffheap.snapshot.PostgresSnapshotLoader;
+import com.localoffheap.snapshot.SnapshotRow;
+import io.aeron.Aeron;
+import io.aeron.driver.MediaDriver;
+
+import java.time.Clock;
+import java.util.List;
+
+public final class LocalOffHeapStoreApplication {
+
+    private LocalOffHeapStoreApplication() {
+    }
+
+    public static void main(String[] args) {
+<span class="nc" id="L32">        DirectByteBufferOffHeapStore store = new DirectByteBufferOffHeapStore();</span>
+<span class="nc" id="L33">        RuntimeHandles runtimeHandles = RuntimeHandles.startFromEnvironment();</span>
+<span class="nc" id="L34">        PostgresSnapshotLoader snapshotLoader = new PostgresSnapshotLoader(</span>
+<span class="nc" id="L35">                new InMemoryPostgresSnapshotRepository(List.of(</span>
+<span class="nc" id="L36">                        new SnapshotRow(&quot;entity-1&quot;, 1, &quot;seed&quot;.getBytes())</span>
+                ), 100L),
+                store
+        );
+
+<span class="nc bnc" id="L41" title="All 2 branches missed.">        EventSource aeronIngress = runtimeHandles.realAeron</span>
+<span class="nc" id="L42">                ? runtimeHandles.realAeronIngress</span>
+<span class="nc" id="L43">                : new AeronIngressAdapter();</span>
+<span class="nc" id="L44">        KafkaIngressAdapter kafkaIngress = new KafkaIngressAdapter();</span>
+<span class="nc bnc" id="L45" title="All 2 branches missed.">        NotificationPublisher aeronPublisher = runtimeHandles.realAeron</span>
+<span class="nc" id="L46">                ? runtimeHandles.realAeronPublisher</span>
+<span class="nc" id="L47">                : new AeronNotificationPublisher();</span>
+
+<span class="nc" id="L49">        LocalOffHeapStoreService service = new LocalOffHeapStoreService(</span>
+                snapshotLoader,
+                aeronIngress,
+                kafkaIngress,
+<span class="nc" id="L53">                new UpsertApplyEngine(store, new OrderingAndVersionGate(), Clock.systemUTC()),</span>
+                new RetryingStateChangePublisher(
+                        aeronPublisher,
+                        new KafkaNotificationPublisher(),
+                        new InMemoryDeadLetterPublisher(),
+                        2
+                ),
+                new InMemoryCheckpointStore(),
+                1024,
+                new ServiceMetrics()
+        );
+
+<span class="nc" id="L65">        service.bootstrap();</span>
+<span class="nc" id="L66">        System.out.println(&quot;Local Off-Heap Store service initialized. Aeron mode=&quot; +</span>
+<span class="nc bnc" id="L67" title="All 2 branches missed.">                (runtimeHandles.realAeron ? &quot;REAL&quot; : &quot;INMEMORY&quot;));</span>
+
+<span class="nc bnc" id="L69" title="All 2 branches missed.">        if (runtimeHandles.realAeron) {</span>
+<span class="nc" id="L70">            Runtime.getRuntime().addShutdownHook(new Thread(runtimeHandles::close));</span>
+            while (true) {
+<span class="nc" id="L72">                service.ingestOnce(256);</span>
+<span class="nc" id="L73">                service.processOnce(256);</span>
+                try {
+<span class="nc" id="L75">                    Thread.sleep(10L);</span>
+<span class="nc" id="L76">                } catch (InterruptedException ex) {</span>
+<span class="nc" id="L77">                    Thread.currentThread().interrupt();</span>
+<span class="nc" id="L78">                    break;</span>
+<span class="nc" id="L79">                }</span>
+            }
+        }
+<span class="nc" id="L82">    }</span>
+
+    private static final class RuntimeHandles implements AutoCloseable {
+        private final boolean realAeron;
+        private final MediaDriver mediaDriver;
+        private final Aeron aeron;
+        private final RealAeronIngressAdapter realAeronIngress;
+        private final RealAeronNotificationPublisher realAeronPublisher;
+
+        private RuntimeHandles(
+                boolean realAeron,
+                MediaDriver mediaDriver,
+                Aeron aeron,
+                RealAeronIngressAdapter realAeronIngress,
+<span class="nc" id="L96">                RealAeronNotificationPublisher realAeronPublisher) {</span>
+<span class="nc" id="L97">            this.realAeron = realAeron;</span>
+<span class="nc" id="L98">            this.mediaDriver = mediaDriver;</span>
+<span class="nc" id="L99">            this.aeron = aeron;</span>
+<span class="nc" id="L100">            this.realAeronIngress = realAeronIngress;</span>
+<span class="nc" id="L101">            this.realAeronPublisher = realAeronPublisher;</span>
+<span class="nc" id="L102">        }</span>
+
+        static RuntimeHandles startFromEnvironment() {
+<span class="nc" id="L105">            String mode = env(&quot;AERON_MODE&quot;, &quot;INMEMORY&quot;);</span>
+<span class="nc bnc" id="L106" title="All 2 branches missed.">            if (!&quot;REAL&quot;.equalsIgnoreCase(mode)) {</span>
+<span class="nc" id="L107">                return new RuntimeHandles(false, null, null, null, null);</span>
+            }
+
+<span class="nc" id="L110">            MediaDriver mediaDriver = null;</span>
+<span class="nc bnc" id="L111" title="All 2 branches missed.">            if (Boolean.parseBoolean(env(&quot;AERON_EMBEDDED_DRIVER&quot;, &quot;true&quot;))) {</span>
+<span class="nc" id="L112">                MediaDriver.Context driverContext = new MediaDriver.Context()</span>
+<span class="nc" id="L113">                        .dirDeleteOnStart(true)</span>
+<span class="nc" id="L114">                        .dirDeleteOnShutdown(true)</span>
+<span class="nc" id="L115">                        .aeronDirectoryName(env(&quot;AERON_DIR&quot;, &quot;/tmp/aeron-local-offheap&quot;));</span>
+<span class="nc" id="L116">                mediaDriver = MediaDriver.launchEmbedded(driverContext);</span>
+            }
+
+<span class="nc" id="L119">            Aeron.Context aeronContext = new Aeron.Context()</span>
+<span class="nc" id="L120">                    .aeronDirectoryName(env(&quot;AERON_DIR&quot;, &quot;/tmp/aeron-local-offheap&quot;));</span>
+<span class="nc" id="L121">            Aeron aeron = Aeron.connect(aeronContext);</span>
+
+<span class="nc" id="L123">            String ingressChannel = env(&quot;AERON_INGRESS_CHANNEL&quot;, &quot;aeron:udp?endpoint=localhost:20121&quot;);</span>
+<span class="nc" id="L124">            int ingressStreamId = Integer.parseInt(env(&quot;AERON_INGRESS_STREAM_ID&quot;, &quot;1001&quot;));</span>
+<span class="nc" id="L125">            String egressChannel = env(&quot;AERON_EGRESS_CHANNEL&quot;, &quot;aeron:udp?endpoint=localhost:20122&quot;);</span>
+<span class="nc" id="L126">            int egressStreamId = Integer.parseInt(env(&quot;AERON_EGRESS_STREAM_ID&quot;, &quot;1002&quot;));</span>
+
+<span class="nc" id="L128">            return new RuntimeHandles(</span>
+                    true,
+                    mediaDriver,
+                    aeron,
+                    new RealAeronIngressAdapter(aeron, ingressChannel, ingressStreamId, 256),
+                    new RealAeronNotificationPublisher(aeron, egressChannel, egressStreamId, 1000)
+            );
+        }
+
+        @Override
+        public void close() {
+<span class="nc bnc" id="L139" title="All 2 branches missed.">            if (realAeronPublisher != null) {</span>
+<span class="nc" id="L140">                realAeronPublisher.close();</span>
+            }
+<span class="nc bnc" id="L142" title="All 2 branches missed.">            if (realAeronIngress != null) {</span>
+<span class="nc" id="L143">                realAeronIngress.close();</span>
+            }
+<span class="nc bnc" id="L145" title="All 2 branches missed.">            if (aeron != null) {</span>
+<span class="nc" id="L146">                aeron.close();</span>
+            }
+<span class="nc bnc" id="L148" title="All 2 branches missed.">            if (mediaDriver != null) {</span>
+<span class="nc" id="L149">                mediaDriver.close();</span>
+            }
+<span class="nc" id="L151">        }</span>
+    }
+
+    private static String env(String key, String defaultValue) {
+<span class="nc" id="L155">        String value = System.getenv(key);</span>
+<span class="nc bnc" id="L156" title="All 4 branches missed.">        return value == null || value.isBlank() ? defaultValue : value;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.14.202510111229</span></div></body></html>

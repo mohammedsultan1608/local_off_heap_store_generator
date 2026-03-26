@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LocalOffHeapStoreService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">service-app</a> &gt; <a href="index.source.html" class="el_package">com.localoffheap.service</a> &gt; <span class="el_source">LocalOffHeapStoreService.java</span></div><h1>LocalOffHeapStoreService.java</h1><pre class="source lang-java linenums">package com.localoffheap.service;
+
+import com.localoffheap.core.apply.ApplyResult;
+import com.localoffheap.core.apply.ApplyStatus;
+import com.localoffheap.core.apply.UpsertApplyEngine;
+import com.localoffheap.core.checkpoint.CheckpointStore;
+import com.localoffheap.core.checkpoint.SourceCheckpoint;
+import com.localoffheap.core.ingress.EventSource;
+import com.localoffheap.core.model.UpsertEvent;
+import com.localoffheap.egress.RetryingStateChangePublisher;
+import com.localoffheap.snapshot.PostgresSnapshotLoader;
+import com.localoffheap.snapshot.SnapshotLoadResult;
+
+import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+
+public final class LocalOffHeapStoreService {
+    private final PostgresSnapshotLoader snapshotLoader;
+    private final EventSource aeronIngress;
+    private final EventSource kafkaIngress;
+    private final UpsertApplyEngine applyEngine;
+    private final RetryingStateChangePublisher publisher;
+    private final CheckpointStore checkpointStore;
+    private final BlockingQueue&lt;UpsertEvent&gt; applyQueue;
+    private final ServiceMetrics metrics;
+    private volatile boolean bootstrapped;
+
+    public LocalOffHeapStoreService(
+            PostgresSnapshotLoader snapshotLoader,
+            EventSource aeronIngress,
+            EventSource kafkaIngress,
+            UpsertApplyEngine applyEngine,
+            RetryingStateChangePublisher publisher,
+            CheckpointStore checkpointStore,
+            int queueCapacity,
+<span class="fc" id="L37">            ServiceMetrics metrics) {</span>
+<span class="fc" id="L38">        this.snapshotLoader = snapshotLoader;</span>
+<span class="fc" id="L39">        this.aeronIngress = aeronIngress;</span>
+<span class="fc" id="L40">        this.kafkaIngress = kafkaIngress;</span>
+<span class="fc" id="L41">        this.applyEngine = applyEngine;</span>
+<span class="fc" id="L42">        this.publisher = publisher;</span>
+<span class="fc" id="L43">        this.checkpointStore = checkpointStore;</span>
+<span class="fc" id="L44">        this.applyQueue = new ArrayBlockingQueue&lt;&gt;(queueCapacity);</span>
+<span class="fc" id="L45">        this.metrics = metrics;</span>
+<span class="fc" id="L46">    }</span>
+
+    public SnapshotLoadResult bootstrap() {
+<span class="fc" id="L49">        SnapshotLoadResult result = snapshotLoader.load();</span>
+<span class="fc" id="L50">        bootstrapped = true;</span>
+<span class="fc" id="L51">        return result;</span>
+    }
+
+    public int ingestOnce(int maxBatchPerSource) {
+<span class="fc" id="L55">        int accepted = 0;</span>
+<span class="fc" id="L56">        accepted += offerAll(aeronIngress.poll(maxBatchPerSource));</span>
+<span class="fc" id="L57">        accepted += offerAll(kafkaIngress.poll(maxBatchPerSource));</span>
+<span class="fc" id="L58">        return accepted;</span>
+    }
+
+    public int processOnce(int maxEvents) {
+<span class="fc" id="L62">        int processed = 0;</span>
+<span class="fc bfc" id="L63" title="All 2 branches covered.">        for (int i = 0; i &lt; maxEvents; i++) {</span>
+<span class="fc" id="L64">            UpsertEvent event = applyQueue.poll();</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">            if (event == null) {</span>
+<span class="fc" id="L66">                break;</span>
+            }
+<span class="fc" id="L68">            processed++;</span>
+<span class="fc" id="L69">            ApplyResult result = applyEngine.apply(event);</span>
+<span class="fc bfc" id="L70" title="All 2 branches covered.">            if (result.status() == ApplyStatus.APPLIED) {</span>
+                try {
+<span class="fc" id="L72">                    publisher.publish(result.notification().orElseThrow());</span>
+<span class="fc" id="L73">                    metrics.incrementApplied();</span>
+<span class="fc" id="L74">                } catch (RuntimeException ex) {</span>
+<span class="fc" id="L75">                    metrics.incrementPublishFailures();</span>
+<span class="fc" id="L76">                    throw ex;</span>
+<span class="fc" id="L77">                }</span>
+<span class="fc bfc" id="L78" title="All 2 branches covered.">            } else if (result.status() == ApplyStatus.DUPLICATE) {</span>
+<span class="fc" id="L79">                metrics.incrementDuplicates();</span>
+            } else {
+<span class="fc" id="L81">                metrics.incrementStale();</span>
+            }
+<span class="fc" id="L83">            checkpointStore.save(new SourceCheckpoint(event.sourceType(), event.sourcePosition()));</span>
+        }
+<span class="fc" id="L85">        return processed;</span>
+    }
+
+    private int offerAll(List&lt;UpsertEvent&gt; events) {
+<span class="fc" id="L89">        int accepted = 0;</span>
+<span class="fc bfc" id="L90" title="All 2 branches covered.">        for (UpsertEvent event : events) {</span>
+<span class="pc bpc" id="L91" title="1 of 2 branches missed.">            if (applyQueue.offer(event)) {</span>
+<span class="fc" id="L92">                accepted++;</span>
+            } else {
+<span class="nc" id="L94">                metrics.incrementIngressBackpressureDrops();</span>
+            }
+<span class="fc" id="L96">        }</span>
+<span class="fc" id="L97">        return accepted;</span>
+    }
+
+    public ServiceMetrics metrics() {
+<span class="fc" id="L101">        return metrics;</span>
+    }
+
+    public int queueSize() {
+<span class="nc" id="L105">        return applyQueue.size();</span>
+    }
+
+    public boolean isReady() {
+<span class="nc" id="L109">        return bootstrapped;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.14.202510111229</span></div></body></html>

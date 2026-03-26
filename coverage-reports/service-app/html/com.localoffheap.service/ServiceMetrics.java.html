@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ServiceMetrics.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">service-app</a> &gt; <a href="index.source.html" class="el_package">com.localoffheap.service</a> &gt; <span class="el_source">ServiceMetrics.java</span></div><h1>ServiceMetrics.java</h1><pre class="source lang-java linenums">package com.localoffheap.service;
+
+import java.util.concurrent.atomic.AtomicLong;
+
+<span class="fc" id="L5">public final class ServiceMetrics {</span>
+<span class="fc" id="L6">    private final AtomicLong applied = new AtomicLong();</span>
+<span class="fc" id="L7">    private final AtomicLong duplicates = new AtomicLong();</span>
+<span class="fc" id="L8">    private final AtomicLong stale = new AtomicLong();</span>
+<span class="fc" id="L9">    private final AtomicLong ingressBackpressureDrops = new AtomicLong();</span>
+<span class="fc" id="L10">    private final AtomicLong publishFailures = new AtomicLong();</span>
+
+    public void incrementApplied() {
+<span class="fc" id="L13">        applied.incrementAndGet();</span>
+<span class="fc" id="L14">    }</span>
+
+    public void incrementDuplicates() {
+<span class="fc" id="L17">        duplicates.incrementAndGet();</span>
+<span class="fc" id="L18">    }</span>
+
+    public void incrementStale() {
+<span class="fc" id="L21">        stale.incrementAndGet();</span>
+<span class="fc" id="L22">    }</span>
+
+    public void incrementIngressBackpressureDrops() {
+<span class="nc" id="L25">        ingressBackpressureDrops.incrementAndGet();</span>
+<span class="nc" id="L26">    }</span>
+
+    public void incrementPublishFailures() {
+<span class="fc" id="L29">        publishFailures.incrementAndGet();</span>
+<span class="fc" id="L30">    }</span>
+
+    public long applied() {
+<span class="fc" id="L33">        return applied.get();</span>
+    }
+
+    public long duplicates() {
+<span class="fc" id="L37">        return duplicates.get();</span>
+    }
+
+    public long stale() {
+<span class="fc" id="L41">        return stale.get();</span>
+    }
+
+    public long ingressBackpressureDrops() {
+<span class="nc" id="L45">        return ingressBackpressureDrops.get();</span>
+    }
+
+    public long publishFailures() {
+<span class="fc" id="L49">        return publishFailures.get();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.14.202510111229</span></div></body></html>
